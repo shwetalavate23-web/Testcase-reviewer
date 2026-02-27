@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zephyr Testcase Reviewer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Zephyr Testcase Reviewer 🌳</h1>
+    <form id="review-form" enctype="multipart/form-data">
+      <label for="ac">Acceptance Criteria</label>
+      <textarea id="ac" name="acceptance_criteria" rows="5" required></textarea>
+
+      <label for="story">User Story</label>
+      <textarea id="story" name="user_story" rows="5" required></textarea>
+
+      <label for="zephyr">Upload Zephyr Export (CSV/JSON)</label>
+      <input id="zephyr" name="zephyr_file" type="file" accept=".csv,.json" required />
+
+      <button type="submit">Review Testcases</button>
+    </form>
+
+    <section id="output" class="hidden">
+      <h2>Review</h2>
+      <pre id="review"></pre>
+      <h2>Coverage</h2>
+      <p id="coverage"></p>
+      <pre id="tree"></pre>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
