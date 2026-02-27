@@ -1,0 +1,7 @@
+"""Web app launcher entry point."""
+
+from app.server import run_server
+
+
+if __name__ == "__main__":
+    run_server()
