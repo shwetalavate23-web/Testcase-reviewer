@@ -5,14 +5,64 @@ from __future__ import annotations
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import re
 from urllib.parse import parse_qs
-import cgi
 
 from app.parser import parse_zephyr_upload
 from app.reviewer import review_testcases
 
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _parse_multipart(content_type: str, body: bytes) -> tuple[dict[str, str], dict[str, dict[str, bytes | str]]]:
+    """Parse multipart/form-data payload without cgi dependency."""
+    match = re.search(r"boundary=([^;]+)", content_type)
+    if not match:
+        return {}, {}
+
+    boundary = match.group(1).strip().strip('"').encode("utf-8")
+    delimiter = b"--" + boundary
+    fields: dict[str, str] = {}
+    files: dict[str, dict[str, bytes | str]] = {}
+
+    for part in body.split(delimiter):
+        part = part.strip()
+        if not part or part == b"--":
+            continue
+
+        if b"\r\n\r\n" not in part:
+            continue
+
+        headers_blob, content = part.split(b"\r\n\r\n", 1)
+        headers = headers_blob.decode("utf-8", errors="replace").split("\r\n")
+        header_map: dict[str, str] = {}
+        for header in headers:
+            if ":" not in header:
+                continue
+            key, value = header.split(":", 1)
+            header_map[key.strip().lower()] = value.strip()
+
+        disposition = header_map.get("content-disposition", "")
+        name_match = re.search(r'name="([^"]+)"', disposition)
+        if not name_match:
+            continue
+
+        field_name = name_match.group(1)
+        filename_match = re.search(r'filename="([^"]*)"', disposition)
+
+        # Trim multipart terminators.
+        content = content.rstrip(b"\r\n")
+
+        if filename_match:
+            files[field_name] = {
+                "filename": filename_match.group(1),
+                "content": content,
+            }
+        else:
+            fields[field_name] = content.decode("utf-8", errors="replace")
+
+    return fields, files
 
 
 class ReviewHandler(BaseHTTPRequestHandler):
@@ -37,24 +87,21 @@ class ReviewHandler(BaseHTTPRequestHandler):
             return
 
         content_type = self.headers.get("Content-Type", "")
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length)
+
         if "multipart/form-data" in content_type:
-            form = cgi.FieldStorage(
-                fp=self.rfile,
-                headers=self.headers,
-                environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": content_type},
-            )
-            acceptance_criteria = form.getvalue("acceptance_criteria", "")
-            user_story = form.getvalue("user_story", "")
-            file_item = form["zephyr_file"] if "zephyr_file" in form else None
-            if file_item is None or not file_item.file:
+            fields, files = _parse_multipart(content_type, body)
+            acceptance_criteria = fields.get("acceptance_criteria", "")
+            user_story = fields.get("user_story", "")
+            file_item = files.get("zephyr_file")
+            if file_item is None:
                 self._json({"error": "Please upload a Zephyr export file."}, status=400)
                 return
-            file_bytes = file_item.file.read()
-            filename = file_item.filename or "upload.csv"
+            file_bytes = file_item.get("content", b"")
+            filename = str(file_item.get("filename") or "upload.csv")
         else:
-            length = int(self.headers.get("Content-Length", "0"))
-            body = self.rfile.read(length).decode("utf-8")
-            params = parse_qs(body)
+            params = parse_qs(body.decode("utf-8", errors="replace"))
             acceptance_criteria = params.get("acceptance_criteria", [""])[0]
             user_story = params.get("user_story", [""])[0]
             self._json({"error": "Upload file is required."}, status=400)
