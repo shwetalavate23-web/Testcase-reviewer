@@ -1,1 +1,5 @@
-# No external dependencies required.
+flask>=3.0.0
+langchain>=0.2.0
+langchain-openai>=0.1.0
+langchain-chroma>=0.1.0
+chromadb>=0.5.0

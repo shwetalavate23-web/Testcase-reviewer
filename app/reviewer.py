@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Protocol
 
+from app.config import settings
 from app.coverage import compute_coverage, render_tree
 from app.llm import LLMClient
 
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "review_prompt.txt"
+
+
+class ContextRetriever(Protocol):
+    def retrieve_context(self, query: str, k: int) -> list[str]:
+        ...
 
 
 def _heuristic_review(cases: list[dict[str, str]]) -> str:
@@ -37,18 +44,56 @@ def _heuristic_review(cases: list[dict[str, str]]) -> str:
         if not labels:
             bullets.append(f"- TC{i}: Labels are empty; tags make triage and analytics way faster.")
 
-    bullets.append("- Roast 1: These tests are close to greatness—they just need less mystery and more specificity.")
-    bullets.append("- Roast 2: Your coverage ambition is strong; your metadata just called asking for equal attention.")
+    bullets.append("- Summary 1: Tighten specificity and these tests move from decent to deadly accurate.")
+    bullets.append("- Summary 2: Great momentum—now make every testcase explicit enough to survive handoffs.")
     return "\n".join(bullets)
 
 
-def review_testcases(cases: list[dict[str, str]], acceptance_criteria: str, user_story: str) -> dict[str, str | int]:
+def _format_testcases(cases: list[dict[str, str]]) -> str:
+    rows: list[str] = []
+    for idx, case in enumerate(cases, start=1):
+        rows.append(
+            "\n".join(
+                [
+                    f"Test Case {idx}",
+                    f"Title: {case.get('title', '')}",
+                    f"Preconditions: {case.get('preconditions', '')}",
+                    f"Test Type: {case.get('test_type', '')}",
+                    f"Labels: {case.get('labels', '')}",
+                    f"Steps: {case.get('steps', '')}",
+                    f"Expected: {case.get('expected', '')}",
+                ]
+            )
+        )
+    return "\n\n".join(rows)
+
+
+def review_testcases(
+    cases: list[dict[str, str]],
+    acceptance_criteria: str,
+    user_story: str,
+    retriever: ContextRetriever | None,
+) -> dict[str, str | int]:
     base_prompt = PROMPT_PATH.read_text(encoding="utf-8")
+    testcase_text = _format_testcases(cases)
+
+    context_chunks: list[str] = []
+    if retriever is not None:
+        query = f"Acceptance Criteria:\n{acceptance_criteria}\n\nUser Story:\n{user_story}\n\n{testcase_text}"
+        try:
+            context_chunks = retriever.retrieve_context(query, k=settings.retrieval_k)
+        except Exception:
+            context_chunks = []
+    guideline_context = "\n\n".join(context_chunks) if context_chunks else "No guideline context retrieved."
+
     prompt = (
         f"{base_prompt}\n\n"
+        "You are a strict QA testcase reviewer. Follow the provided QA guideline context strictly.\n"
+        "Output must be bullet points, humorous-but-professional tone, and exactly two summary lines at the end.\n\n"
+        f"Retrieved QA Guideline Context:\n{guideline_context}\n\n"
         f"Acceptance Criteria:\n{acceptance_criteria}\n\n"
         f"User Story:\n{user_story}\n\n"
-        f"Test Cases:\n{cases}\n"
+        f"Testcase Content:\n{testcase_text}\n"
     )
 
     llm_output = ""

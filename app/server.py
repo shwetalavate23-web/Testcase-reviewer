@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from flask import Flask, request, jsonify, send_from_directory
 
 from app.parser import parse_zephyr_upload
+from app.rag.retriever import initialize_retriever
 from app.reviewer import review_testcases
 
 
@@ -18,6 +19,12 @@ app = Flask(
     template_folder=str(ROOT / "templates"),
     static_folder=str(ROOT / "static"),
 )
+
+try:
+    RETRIEVER = initialize_retriever()
+except Exception as exc:
+    print(f"RAG initialization warning: {exc}")
+    RETRIEVER = None
 
 
 @app.route("/")
@@ -41,7 +48,7 @@ def review():
     if not cases:
         return jsonify({"error": "No test cases found in uploaded file."}), 400
 
-    result = review_testcases(cases, acceptance_criteria, user_story)
+    result = review_testcases(cases, acceptance_criteria, user_story, RETRIEVER)
     _write_output_markdown(filename, acceptance_criteria, user_story, result)
     result["output_file"] = OUTPUT_PATH.name
     return jsonify(result)

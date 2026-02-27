@@ -26,7 +26,7 @@ class LLMClient:
 
     def _openai(self, prompt: str) -> str:
         payload = {
-            "model": settings.model,
+            "model": settings.llm_model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.3,
         }
@@ -42,7 +42,7 @@ class LLMClient:
 
     def _google(self, prompt: str) -> str:
         url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/{settings.model}:generateContent"
+            f"https://generativelanguage.googleapis.com/v1beta/models/{settings.llm_model}:generateContent"
             f"?key={settings.google_api_key}"
         )
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -52,7 +52,7 @@ class LLMClient:
     def _ollama(self, prompt: str) -> str:
         result = self._post_json(
             f"{settings.ollama_host}/api/generate",
-            {"model": settings.model, "prompt": prompt, "stream": False},
+            {"model": settings.llm_model, "prompt": prompt, "stream": False},
             {"Content-Type": "application/json"},
         )
         return result.get("response", "")
