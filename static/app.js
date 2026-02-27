@@ -19,5 +19,8 @@ form.addEventListener('submit', async (event) => {
   document.getElementById('review').textContent = payload.review;
   document.getElementById('coverage').textContent = `${payload.coverage}%`;
   document.getElementById('tree').textContent = payload.tree;
+  document.getElementById('save-status').textContent = payload.output_file
+    ? `Saved review comments to ${payload.output_file}`
+    : '';
   output.classList.remove('hidden');
 });
